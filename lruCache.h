@@ -10,18 +10,22 @@
 
 #include "cachePolicy.h"
 
-namespace LruCacheImpl
+namespace CacheImpl
 {
     template <typename Key, typename Value> class LruCache;
+    template <typename Key, typename Value> class TraversableLruCache;
+    
     template <typename Key, typename Value>
     class LruNode
     {
+        protected:
+            std::shared_ptr<LruNode<Key, Value>> next_;
+
         private:
             Key key_;
             Value value_;
             size_t accessCount_;
             std::weak_ptr<LruNode<Key, Value>> prev_;
-            std::shared_ptr<LruNode<Key, Value>> next_;
 
         public:
         LruNode(Key key, Value value)
@@ -37,6 +41,7 @@ namespace LruCacheImpl
         void incrementAccessCount() { ++accessCount_; }
 
         friend class LruCache<Key, Value>;
+        friend class TraversableLruCache<Key, Value>;
     };
 
     template <typename Key, typename Value>
@@ -46,6 +51,9 @@ namespace LruCacheImpl
             using LruNodeType = LruNode<Key, Value>;
             using NodePtr = std::shared_ptr<LruNodeType>;
             using NodeMap = std::unordered_map<Key, NodePtr>;
+
+            // 声明 TraversableLruCache 为友元类
+            friend class TraversableLruCache<Key, Value>;
 
             LruCache(int capacity)
                 : capacity_(capacity)
@@ -102,7 +110,14 @@ namespace LruCacheImpl
                 }
             }
 
-        private:
+            void purge()
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                nodeMap_.clear();
+                initializedList();
+            }
+
+        protected:
             void initializedList()
             {
                 dummyHead_ = std::make_shared<LruNodeType>(Key(), Value());
@@ -119,7 +134,7 @@ namespace LruCacheImpl
 
             void addNode(const Key& key, const Value& value)
             {
-                if (nodeMap_.size() >= capacity_)
+                if (nodeMap_.size() >= static_cast<size_t>(capacity_))
                 {
                     removeLeastUsed();
                 }
@@ -175,7 +190,6 @@ namespace LruCacheImpl
                 }
             }
 
-        private:
             int capacity_;
             NodeMap nodeMap_;
             std::mutex mutex_;
@@ -265,7 +279,7 @@ namespace LruCacheImpl
                 : capacity_(capacity)
                 , sliceNum_(sliceNum > 0 ? sliceNum : std::thread::hardware_concurrency())
             {
-                size_t sliceSize = std::ceil(capacity / static_cast<double>(sliceNum_));
+                size_t sliceSize = std::ceil(capacity_ / static_cast<double>(sliceNum_));
                 for (int i = 0; i < sliceNum_; ++i)
                 {
                     lruSliceCaches_.emplace_back(new LruCache<Key, Value>(sliceSize));
@@ -286,18 +300,32 @@ namespace LruCacheImpl
 
             Value get(Key key)
             {
-                Value value;
+                Value value{};
                 get(key, value);
                 return value;
             }
 
+            void remove(Key key)
+            {
+                size_t sliceIndex = Hash(key) % sliceNum_;
+                lruSliceCaches_[sliceIndex]->remove(key);
+            }
+
+            void purge()
+            {
+                for (auto& cache : lruSliceCaches_)
+                {
+                    cache->purge();
+                }
+            }
+        
         private:
             size_t Hash(Key key)
             {
                 std::hash<Key> hashFunc;
                 return hashFunc(key);
             }
-
+        
         private:
             size_t capacity_;
             int sliceNum_;

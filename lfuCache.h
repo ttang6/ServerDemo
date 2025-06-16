@@ -309,6 +309,13 @@ namespace CacheImpl
                 return lfuSliceCaches_[sliceIndex]->get(key, value);
             }
 
+            Value get(Key key)
+            {
+                Value value{};
+                get(key, value);
+                return value;
+            }
+
             void purge()
             {
                 for (auto& cache : lfuSliceCaches_)

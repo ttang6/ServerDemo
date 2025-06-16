@@ -1,6 +1,6 @@
 #pragma once
 
-namespace LruCacheImpl
+namespace CacheImpl
 {
     template <typename Key, typename Value>
     class CachePolicy
