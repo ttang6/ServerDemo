@@ -135,7 +135,6 @@ int main() {
                 std::string message = json["message"];
                 std::string conversationId = json.value("conversationId", "");
                 
-                // 获取或创建会话历史
                 SessionHistory history;
                 if (session_cache.get(conversationId, history)) {
                     history.messages.push_back(message);
@@ -164,7 +163,6 @@ int main() {
                     
                     printCacheStats();
 
-                    // 更新会话历史
                     history.lastResponse = cached_response.content;
                     session_cache.put(conversationId, history);
                     return;
@@ -225,7 +223,6 @@ int main() {
                     
                     printCacheStats();
 
-                    // 更新会话历史
                     history.lastResponse = assistant_reply;
                     session_cache.put(conversationId, history);
                 } else {
@@ -246,7 +243,6 @@ int main() {
             }
         });
 
-        // 添加获取会话历史的API端点
         svr.Get("/api/session/:id", [&session_cache](const httplib::Request &req, httplib::Response &res) {
             try {
                 std::string conversationId = req.path_params.at("id");
@@ -273,13 +269,11 @@ int main() {
             }
         });
 
-        // 添加获取会话列表的API端点
         svr.Get("/api/session/list", [&session_cache](const httplib::Request &req, httplib::Response &res) {
             try {
                 nlohmann::json response;
                 nlohmann::json sessions = nlohmann::json::array();
                 
-                // 由于没有 get_all 方法，我们返回一个空列表
                 response["sessions"] = sessions;
                 res.set_content(response.dump(), "application/json");
             } catch (const std::exception& e) {
